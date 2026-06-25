@@ -1,12 +1,94 @@
-<?php 
-include '../../includes/header.php'; 
+<?php
+require_once dirname(__DIR__, 2) . '/includes/auth_check.php';
+require_once dirname(__DIR__, 2) . '/config/db.php';
 
-$usuario = [
-    'nombre' => 'Carlos Vendedor',
-    'email' => 'carlos@email.com',
-    'tipo' => 'Vendedor',
-    'miembro_desde' => 'Enero 2026'
-];
+requireAuth();
+
+$usuario = $_SESSION['usuario'];
+$flash_error   = $_SESSION['flash_error'] ?? null;
+$flash_success = $_SESSION['flash_success'] ?? null;
+unset($_SESSION['flash_error'], $_SESSION['flash_success']);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion'])) {
+    iniciarSesion();
+
+    if ($_POST['accion'] === 'actualizar_perfil') {
+        $nombre = trim($_POST['nombre'] ?? '');
+        $email  = trim($_POST['email'] ?? '');
+
+        if (strlen($nombre) < 3) {
+            $_SESSION['flash_error'] = 'El nombre debe tener al menos 3 caracteres.';
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['flash_error'] = 'El correo no es válido.';
+        } else {
+            try {
+                $pdo = getDB();
+                $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE email = :email AND id != :id LIMIT 1");
+                $stmt->execute(['email' => $email, 'id' => $usuario['id']]);
+                if ($stmt->fetch()) {
+                    $_SESSION['flash_error'] = 'Este correo ya está en uso por otro usuario.';
+                } else {
+                    $stmt = $pdo->prepare("UPDATE usuarios SET nombre = :nombre, email = :email WHERE id = :id");
+                    $stmt->execute(['nombre' => $nombre, 'email' => $email, 'id' => $usuario['id']]);
+                    $_SESSION['usuario']['nombre'] = $nombre;
+                    $_SESSION['usuario']['email'] = $email;
+                    $_SESSION['flash_success'] = 'Datos actualizados correctamente.';
+                }
+            } catch (PDOException $e) {
+                $_SESSION['flash_error'] = 'Error del servidor. Intenta de nuevo.';
+            }
+        }
+        redirigir('perfil.php');
+    }
+
+    if ($_POST['accion'] === 'cambiar_password') {
+        $actual    = $_POST['password_actual'] ?? '';
+        $nueva     = $_POST['password_nueva'] ?? '';
+        $confirmar = $_POST['password_confirmar'] ?? '';
+
+        if (empty($actual) || empty($nueva) || empty($confirmar)) {
+            $_SESSION['flash_error'] = 'Todos los campos de contraseña son obligatorios.';
+        } elseif (strlen($nueva) < 8) {
+            $_SESSION['flash_error'] = 'La nueva contraseña debe tener al menos 8 caracteres.';
+        } elseif ($nueva !== $confirmar) {
+            $_SESSION['flash_error'] = 'Las contraseñas no coinciden.';
+        } else {
+            try {
+                $pdo = getDB();
+                $stmt = $pdo->prepare("SELECT password FROM usuarios WHERE id = :id LIMIT 1");
+                $stmt->execute(['id' => $usuario['id']]);
+                $row = $stmt->fetch();
+
+                if (!password_verify($actual, $row['password'])) {
+                    $_SESSION['flash_error'] = 'La contraseña actual no es correcta.';
+                } else {
+                    $hash = password_hash($nueva, PASSWORD_DEFAULT);
+                    $stmt = $pdo->prepare("UPDATE usuarios SET password = :hash WHERE id = :id");
+                    $stmt->execute(['hash' => $hash, 'id' => $usuario['id']]);
+                    $_SESSION['flash_success'] = 'Contraseña actualizada correctamente.';
+                }
+            } catch (PDOException $e) {
+                $_SESSION['flash_error'] = 'Error del servidor. Intenta de nuevo.';
+            }
+        }
+        redirigir('perfil.php');
+    }
+}
+
+try {
+    $pdo = getDB();
+    $stmt = $pdo->prepare("SELECT fecha_registro FROM usuarios WHERE id = :id LIMIT 1");
+    $stmt->execute(['id' => $usuario['id']]);
+    $row = $stmt->fetch();
+    $miembro_desde = $row ? date('d/m/Y', strtotime($row['fecha_registro'])) : '—';
+} catch (PDOException $e) {
+    $miembro_desde = '—';
+}
+
+$tipos = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'comprador' => 'Comprador'];
+$tipo_label = $tipos[$usuario['tipo']] ?? ucfirst($usuario['tipo']);
+
+include '../../includes/header.php';
 ?>
 
     <main class="dashboard-page">
@@ -18,34 +100,42 @@ $usuario = [
                 </div>
             </div>
 
+            <?php if ($flash_error): ?>
+                <div class="alert alert--error"><?php echo htmlspecialchars($flash_error); ?></div>
+            <?php endif; ?>
+            <?php if ($flash_success): ?>
+                <div class="alert alert--success"><?php echo htmlspecialchars($flash_success); ?></div>
+            <?php endif; ?>
+
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: start;">
                 <div class="property-form-container" style="max-width: 100%;">
                     <div class="property-form-header">
                         <h2>DATOS PERSONALES</h2>
                     </div>
 
-                    <form id="formPerfil" action="#" method="POST" novalidate>
+                    <form id="formPerfil" action="perfil.php" method="POST" novalidate>
+                        <input type="hidden" name="accion" value="actualizar_perfil">
                         <div class="form-grid">
                             <div class="form-group full-width">
                                 <label for="nombre">Nombre completo</label>
-                                <input type="text" id="nombre" name="nombre" class="form-control" value="<?php echo $usuario['nombre']; ?>" required minlength="3">
+                                <input type="text" id="nombre" name="nombre" class="form-control" value="<?php echo htmlspecialchars($usuario['nombre']); ?>" required minlength="3">
                                 <div class="invalid-feedback">El nombre debe tener al menos 3 caracteres.</div>
                             </div>
 
                             <div class="form-group full-width">
                                 <label for="email">Correo electrónico</label>
-                                <input type="email" id="email" name="email" class="form-control" value="<?php echo $usuario['email']; ?>" required>
+                                <input type="email" id="email" name="email" class="form-control" value="<?php echo htmlspecialchars($usuario['email']); ?>" required>
                                 <div class="invalid-feedback">Ingresa un correo válido.</div>
                             </div>
 
                             <div class="form-group">
                                 <label>Tipo de cuenta</label>
-                                <input type="text" class="form-control" value="<?php echo $usuario['tipo']; ?>" disabled style="background-color: #f3f4f6;">
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($tipo_label); ?>" disabled style="background-color: #f3f4f6;">
                             </div>
 
                             <div class="form-group">
                                 <label>Miembro desde</label>
-                                <input type="text" class="form-control" value="<?php echo $usuario['miembro_desde']; ?>" disabled style="background-color: #f3f4f6;">
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($miembro_desde); ?>" disabled style="background-color: #f3f4f6;">
                             </div>
                         </div>
 
@@ -62,7 +152,8 @@ $usuario = [
                         <h2>CAMBIAR CONTRASEÑA</h2>
                     </div>
 
-                    <form id="formPassword" action="#" method="POST" novalidate>
+                    <form id="formPassword" action="perfil.php" method="POST" novalidate>
+                        <input type="hidden" name="accion" value="cambiar_password">
                         <div class="form-grid">
                             <div class="form-group full-width">
                                 <label for="password_actual">Contraseña actual</label>
@@ -97,12 +188,14 @@ $usuario = [
                     <h2>ACCESO RÁPIDO</h2>
                 </div>
                 <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-                    <a href="<?php echo BASE_URL; ?>views/vendedor/dashboard.php" class="btn btn--light-outline">
-                        <i class="fa-solid fa-chart-simple"></i> MI DASHBOARD
-                    </a>
-                    <a href="<?php echo BASE_URL; ?>views/vendedor/nueva-propiedad.php" class="btn btn--light-outline">
-                        <i class="fa-solid fa-plus"></i> PUBLICAR PROPIEDAD
-                    </a>
+                    <?php if ($usuario['tipo'] === 'Vendedor' || $usuario['tipo'] === 'Administrador'): ?>
+                        <a href="<?php echo BASE_URL; ?>views/vendedor/dashboard.php" class="btn btn--light-outline">
+                            <i class="fa-solid fa-chart-simple"></i> MI DASHBOARD
+                        </a>
+                        <a href="<?php echo BASE_URL; ?>views/vendedor/nueva-propiedad.php" class="btn btn--light-outline">
+                            <i class="fa-solid fa-plus"></i> PUBLICAR PROPIEDAD
+                        </a>
+                    <?php endif; ?>
                     <a href="<?php echo BASE_URL; ?>views/public/catalogo.php" class="btn btn--light-outline">
                         <i class="fa-solid fa-building"></i> VER CATÁLOGO
                     </a>
@@ -128,9 +221,6 @@ $usuario = [
                 });
                 if (!isValid) {
                     event.preventDefault();
-                } else {
-                    event.preventDefault();
-                    alert('Datos actualizados correctamente.');
                 }
             });
 
@@ -163,10 +253,6 @@ $usuario = [
                 }
                 if (!isValid) {
                     event.preventDefault();
-                } else {
-                    event.preventDefault();
-                    alert('Contraseña actualizada correctamente.');
-                    formPassword.reset();
                 }
             });
 

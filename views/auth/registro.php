@@ -1,5 +1,17 @@
-<?php 
-include '../../includes/header.php'; 
+<?php
+require_once dirname(__DIR__, 2) . '/includes/auth_check.php';
+
+iniciarSesion();
+
+if (estaLogueado()) {
+    redirigirPorRol($_SESSION['usuario']['tipo']);
+}
+
+$flash_error   = $_SESSION['flash_error'] ?? null;
+$flash_success = $_SESSION['flash_success'] ?? null;
+unset($_SESSION['flash_error'], $_SESSION['flash_success']);
+
+include '../../includes/header.php';
 ?>
 
     <main class="auth-page">
@@ -10,7 +22,14 @@ include '../../includes/header.php';
                 <p class="text-light">Crea tu cuenta en Inmuebles con Troso</p>
             </div>
 
-            <form id="formRegistro" action="#" method="POST" novalidate>
+            <?php if ($flash_error): ?>
+                <div class="alert alert--error"><?php echo htmlspecialchars($flash_error); ?></div>
+            <?php endif; ?>
+            <?php if ($flash_success): ?>
+                <div class="alert alert--success"><?php echo htmlspecialchars($flash_success); ?></div>
+            <?php endif; ?>
+
+            <form id="formRegistro" action="procesar-registro.php" method="POST" novalidate>
                 
                 <div class="form-group">
                     <label for="nombre">Nombre Completo</label>
@@ -34,11 +53,11 @@ include '../../includes/header.php';
                     <label>Tipo de cuenta</label>
                     <div class="radio-options">
                         <label class="radio-label">
-                            <input type="radio" name="tipo_cuenta" value="comprador" required>
+                            <input type="radio" name="tipo_cuenta" value="Comprador" required>
                             <span><strong>Comprador</strong> - Busco propiedades para comprar o rentar</span>
                         </label>
                         <label class="radio-label">
-                            <input type="radio" name="tipo_cuenta" value="vendedor" required>
+                            <input type="radio" name="tipo_cuenta" value="Vendedor" required>
                             <span><strong>Vendedor</strong> - Quiero publicar mis propiedades</span>
                         </label>
                     </div>
@@ -67,7 +86,6 @@ include '../../includes/header.php';
             form.addEventListener('submit', function(event) {
                 let isValid = true;
 
-                // 1. Validar inputs de texto, email y password
                 inputs.forEach(input => {
                     if (!input.checkValidity()) {
                         input.classList.add('is-invalid');
@@ -77,7 +95,6 @@ include '../../includes/header.php';
                     }
                 });
 
-                // 2. Validar radio buttons (Tipo de cuenta)
                 let isRadioSelected = false;
                 radios.forEach(radio => {
                     if (radio.checked) {
@@ -92,16 +109,11 @@ include '../../includes/header.php';
                     radioError.style.display = 'none';
                 }
 
-                // 3. Si algo es inválido, detenemos el envío
                 if (!isValid) {
-                    event.preventDefault(); // Evita que la página recargue
-                } else {
-                    event.preventDefault(); 
-                    alert("¡Validación exitosa! Listo para enviar a PHP.");
+                    event.preventDefault();
                 }
             });
 
-            // Limpiar el error visual cuando el usuario empiece a escribir
             inputs.forEach(input => {
                 input.addEventListener('input', function() {
                     if (this.checkValidity()) {
@@ -110,7 +122,6 @@ include '../../includes/header.php';
                 });
             });
 
-            // Limpiar el error de los radios al seleccionar uno
             radios.forEach(radio => {
                 radio.addEventListener('change', function() {
                     radioError.style.display = 'none';

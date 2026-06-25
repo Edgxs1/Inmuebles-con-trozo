@@ -1,5 +1,17 @@
-<?php 
-include '../../includes/header.php'; 
+<?php
+require_once dirname(__DIR__, 2) . '/includes/auth_check.php';
+
+iniciarSesion();
+
+if (estaLogueado()) {
+    redirigirPorRol($_SESSION['usuario']['tipo']);
+}
+
+$flash_error   = $_SESSION['flash_error'] ?? null;
+$flash_success = $_SESSION['flash_success'] ?? null;
+unset($_SESSION['flash_error'], $_SESSION['flash_success']);
+
+include '../../includes/header.php';
 ?>
 
     <main class="auth-page">
@@ -10,7 +22,14 @@ include '../../includes/header.php';
                 <p class="text-light">Accede a tu panel de control</p>
             </div>
 
-            <form id="formLogin" action="#" method="POST" novalidate>
+            <?php if ($flash_error): ?>
+                <div class="alert alert--error"><?php echo htmlspecialchars($flash_error); ?></div>
+            <?php endif; ?>
+            <?php if ($flash_success): ?>
+                <div class="alert alert--success"><?php echo htmlspecialchars($flash_success); ?></div>
+            <?php endif; ?>
+
+            <form id="formLogin" action="procesar-login.php" method="POST" novalidate>
                 
                 <div class="form-group">
                     <label for="email">Email</label>
@@ -47,7 +66,6 @@ include '../../includes/header.php';
             form.addEventListener('submit', function(event) {
                 let isValid = true;
 
-                // Validar email y password
                 inputs.forEach(input => {
                     if (!input.checkValidity()) {
                         input.classList.add('is-invalid');
@@ -57,17 +75,11 @@ include '../../includes/header.php';
                     }
                 });
 
-                // Detener envío si hay errores
                 if (!isValid) {
-                    event.preventDefault(); 
-                } else {
-                    // Simulación de envío exitoso
-                    event.preventDefault(); 
-                    alert("Validación de login exitosa. Listo para conectar con auth.php.");
+                    event.preventDefault();
                 }
             });
 
-            // Limpiar errores mientras el usuario escribe
             inputs.forEach(input => {
                 input.addEventListener('input', function() {
                     if (this.checkValidity()) {

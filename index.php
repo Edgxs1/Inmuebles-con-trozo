@@ -1,17 +1,19 @@
 <?php 
-require_once 'config/data.php';
+require_once 'config/config.php';
+require_once 'config/db.php';
+
+require_once 'includes/auth_check.php';
+require_once 'includes/db_funciones.php';
+
+iniciarSesion();
+
+if (estaLogueado() && in_array($_SESSION['usuario']['tipo'], ['Administrador', 'Vendedor'])) {
+    redirigirPorRol($_SESSION['usuario']['tipo']);
+}
 
 include 'includes/header.php'; 
 
-$propiedades_destacadas = [];
-foreach($propiedades as $id => $prop) {
-    if(isset($prop['destacado']) && $prop['destacado'] === true) {
-        $propiedades_destacadas[$id] = $prop;
-    }
-    if(count($propiedades_destacadas) >= 3) {
-        break;
-    }
-}
+$propiedades_destacadas = obtenerPropiedadesDestacadas(3);
 ?>
 
     <main>
@@ -26,9 +28,10 @@ foreach($propiedades as $id => $prop) {
                     <div class="search-divider"></div>
                     <select name="tipo" class="search-select">
                         <option value="todos">TIPO DE INMUEBLE</option>
-                        <option value="casa">Casa</option>
-                        <option value="departamento">Departamento</option>
-                        <option value="local comercial">Local Comercial</option>
+                        <option value="Casa">Casa</option>
+                        <option value="Departamento">Departamento</option>
+                        <option value="Local Comercial">Local Comercial</option>
+                        <option value="Terreno">Terreno</option>
                     </select>
                     <button type="submit" class="btn btn--primary search-btn"><i class="fa-solid fa-magnifying-glass"></i> BUSCAR</button>
                 </form>
@@ -68,7 +71,7 @@ foreach($propiedades as $id => $prop) {
                         <div class="property-card__img-wrapper">
                             <span class="badge">DESTACADO</span>
                             <a href="<?php echo BASE_URL; ?>views/public/propiedad.php?id=<?php echo $prop['id']; ?>">
-                                <img src="<?php echo $prop['imagen']; ?>" alt="<?php echo $prop['titulo']; ?>">
+                                <img src="<?php echo imgUrl($prop['imagen']); ?>" alt="<?php echo $prop['titulo']; ?>">
                             </a>
                         </div>
                         <div class="property-card__content">
@@ -78,15 +81,15 @@ foreach($propiedades as $id => $prop) {
                                     <?php echo $prop['titulo']; ?>
                                 </a>
                             </h3>
-                            <p class="price">$<?php echo number_format($prop['precio']); ?></p>
+                            <p class="price">$<?php echo number_format((float)$prop['precio']); ?></p>
                             <p class="location"><i class="fa-solid fa-location-dot"></i> <?php echo $prop['ubicacion']; ?></p>
                             
                             <div class="property-specs">
-                                <?php if($prop['habitaciones'] > 0): ?>
+                                <?php if((int)$prop['habitaciones'] > 0): ?>
                                     <span><i class="fa-solid fa-bed"></i> <?php echo $prop['habitaciones']; ?></span>
                                 <?php endif; ?>
                                 
-                                <?php if($prop['banos'] > 0): ?>
+                                <?php if((int)$prop['banos'] > 0): ?>
                                     <span><i class="fa-solid fa-bath"></i> <?php echo $prop['banos']; ?></span>
                                 <?php endif; ?>
                                 

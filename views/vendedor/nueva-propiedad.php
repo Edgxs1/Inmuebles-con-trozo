@@ -1,5 +1,12 @@
-<?php 
-include '../../includes/header.php'; 
+<?php
+require_once dirname(__DIR__, 2) . '/includes/auth_check.php';
+requireRol('Vendedor');
+
+$flash_error   = $_SESSION['flash_error'] ?? null;
+$flash_success = $_SESSION['flash_success'] ?? null;
+unset($_SESSION['flash_error'], $_SESSION['flash_success']);
+
+include '../../includes/header.php';
 ?>
 
     <main class="dashboard-page bg-light">
@@ -11,13 +18,20 @@ include '../../includes/header.php';
                 </a>
             </div>
 
+            <?php if ($flash_success): ?>
+                <div class="alert alert--success"><?php echo htmlspecialchars($flash_success); ?></div>
+            <?php endif; ?>
+            <?php if ($flash_error): ?>
+                <div class="alert alert--error"><?php echo htmlspecialchars($flash_error); ?></div>
+            <?php endif; ?>
+
             <div class="property-form-container">
                 <div class="property-form-header">
                     <h1>PUBLICAR NUEVA PROPIEDAD</h1>
                     <p class="text-light">Completa los detalles de tu inmueble. Una vez publicado, pasará a revisión por un administrador.</p>
                 </div>
 
-                <form id="formPropiedad" action="#" method="POST" enctype="multipart/form-data" novalidate>
+                <form id="formPropiedad" action="procesar-nueva-propiedad.php" method="POST" enctype="multipart/form-data" novalidate>
                     
                     <div class="form-grid">
                         
@@ -60,7 +74,7 @@ include '../../includes/header.php';
                                 <option value="Jalisco">Jalisco</option>
                                 <option value="Quintana Roo">Quintana Roo</option>
                                 <option value="Nuevo León">Nuevo León</option>
-                                </select>
+                            </select>
                             <div class="invalid-feedback">Selecciona el estado.</div>
                         </div>
 
@@ -124,14 +138,10 @@ include '../../includes/header.php';
 
                 if (!isValid) {
                     event.preventDefault(); 
-                    // Hace scroll automático hacia el primer error
                     const firstError = document.querySelector('.is-invalid');
                     if(firstError) {
                         firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     }
-                } else {
-                    event.preventDefault(); 
-                    alert("¡Propiedad enviada a revisión correctamente! (Simulación Frontend)");
                 }
             });
 

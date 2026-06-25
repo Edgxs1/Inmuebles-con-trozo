@@ -1,14 +1,25 @@
 <?php
-require_once '../../config/data.php';
+require_once dirname(__DIR__, 2) . '/includes/auth_check.php';
+require_once dirname(__DIR__, 2) . '/includes/db_funciones.php';
+
+requireRol('Vendedor');
 
 $id_propiedad = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+$prop = obtenerPropiedad($id_propiedad);
 
-if (!isset($propiedades[$id_propiedad])) {
+if (!$prop) {
     header("Location: dashboard.php");
     exit;
 }
 
-$prop = $propiedades[$id_propiedad];
+if ($_SESSION['usuario']['tipo'] !== 'admin' && (int)$prop['vendedor_id'] !== $_SESSION['usuario']['id']) {
+    header("Location: dashboard.php");
+    exit;
+}
+
+$flash_error   = $_SESSION['flash_error'] ?? null;
+$flash_success = $_SESSION['flash_success'] ?? null;
+unset($_SESSION['flash_error'], $_SESSION['flash_success']);
 
 include '../../includes/header.php';
 ?>
@@ -22,13 +33,21 @@ include '../../includes/header.php';
             </a>
         </div>
 
+        <?php if ($flash_success): ?>
+            <div class="alert alert--success"><?php echo htmlspecialchars($flash_success); ?></div>
+        <?php endif; ?>
+        <?php if ($flash_error): ?>
+            <div class="alert alert--error"><?php echo htmlspecialchars($flash_error); ?></div>
+        <?php endif; ?>
+
         <div class="property-form-container">
             <div class="property-form-header">
                 <h1>EDITAR PROPIEDAD</h1>
                 <p class="text-light">Modifica los datos de tu inmueble.</p>
             </div>
 
-            <form id="formEditarPropiedad" action="#" method="POST" enctype="multipart/form-data" novalidate>
+            <form id="formEditarPropiedad" action="procesar-editar-propiedad.php" method="POST" enctype="multipart/form-data" novalidate>
+                <input type="hidden" name="id" value="<?php echo $prop['id']; ?>">
 
                 <div class="form-grid">
 
@@ -50,13 +69,10 @@ include '../../includes/header.php';
                         <label for="tipo">Tipo de Inmueble <span class="text-accent">*</span></label>
                         <select id="tipo" name="tipo" class="form-control" required>
                             <option value="">Selecciona una opción</option>
-
                             <option value="Casa" <?php echo $prop['tipo'] == 'Casa' ? 'selected' : ''; ?>>Casa</option>
-                            <option value="Departamento" <?php echo $prop['tipo'] == 'Departamento' ? 'selected' : ''; ?>>
-                                Departamento</option>
+                            <option value="Departamento" <?php echo $prop['tipo'] == 'Departamento' ? 'selected' : ''; ?>>Departamento</option>
                             <option value="Local Comercial" <?php echo $prop['tipo'] == 'Local Comercial' ? 'selected' : ''; ?>>Local Comercial</option>
-                            <option value="Terreno" <?php echo $prop['tipo'] == 'Terreno' ? 'selected' : ''; ?>>Terreno
-                            </option>
+                            <option value="Terreno" <?php echo $prop['tipo'] == 'Terreno' ? 'selected' : ''; ?>>Terreno</option>
                         </select>
                         <div class="invalid-feedback">Selecciona el tipo de inmueble.</div>
                     </div>
@@ -72,14 +88,11 @@ include '../../includes/header.php';
                         <label for="estado">Estado <span class="text-accent">*</span></label>
                         <select id="estado" name="estado" class="form-control" required>
                             <option value="">Selecciona un estado</option>
-
                             <option value="Ciudad de México" <?php echo $prop['estado'] == 'Ciudad de México' ? 'selected' : ''; ?>>Ciudad de México</option>
                             <option value="Estado de México" <?php echo $prop['estado'] == 'Estado de México' ? 'selected' : ''; ?>>Estado de México</option>
-                            <option value="Jalisco" <?php echo $prop['estado'] == 'Jalisco' ? 'selected' : ''; ?>>Jalisco
-                            </option>
+                            <option value="Jalisco" <?php echo $prop['estado'] == 'Jalisco' ? 'selected' : ''; ?>>Jalisco</option>
                             <option value="Quintana Roo" <?php echo $prop['estado'] == 'Quintana Roo' ? 'selected' : ''; ?>>Quintana Roo</option>
-                            <option value="Nuevo León" <?php echo $prop['estado'] == 'Nuevo León' ? 'selected' : ''; ?>>
-                                Nuevo León</option>
+                            <option value="Nuevo León" <?php echo $prop['estado'] == 'Nuevo León' ? 'selected' : ''; ?>>Nuevo León</option>
                         </select>
                         <div class="invalid-feedback">Selecciona el estado.</div>
                     </div>
@@ -107,23 +120,20 @@ include '../../includes/header.php';
                         <label for="descripcion">Descripción de la propiedad <span class="text-accent">*</span></label>
                         <textarea id="descripcion" name="descripcion" class="form-control" rows="5" required
                             minlength="30"><?php echo htmlspecialchars($prop['descripcion']); ?></textarea>
-                        <div class="invalid-feedback">La descripción debe ser más detallada (mínimo 30 caracteres).
-                        </div>
+                        <div class="invalid-feedback">La descripción debe ser más detallada (mínimo 30 caracteres).</div>
                     </div>
 
                     <div class="form-group full-width">
                         <label for="imagen">Fotografía Principal</label>
                         <input type="file" id="imagen" name="imagen" class="form-control file-input"
                             accept="image/png, image/jpeg, image/webp">
-                        <small class="text-light" style="margin-top: 5px; display: block;">Deja en blanco para mantener
-                            la imagen actual.</small>
+                        <small class="text-light" style="margin-top: 5px; display: block;">Deja en blanco para mantener la imagen actual.</small>
                     </div>
 
                 </div>
 
                 <div class="form-actions mt-4">
-                    <button type="submit" class="btn btn--primary"><i class="fa-solid fa-floppy-disk"></i> GUARDAR
-                        CAMBIOS</button>
+                    <button type="submit" class="btn btn--primary"><i class="fa-solid fa-floppy-disk"></i> GUARDAR CAMBIOS</button>
                     <a href="dashboard.php" class="btn btn--light-outline" style="margin-left: 10px;">CANCELAR</a>
                 </div>
 
@@ -139,7 +149,6 @@ include '../../includes/header.php';
 
         form.addEventListener('submit', function (event) {
             let isValid = true;
-
             inputs.forEach(input => {
                 if (!input.checkValidity()) {
                     input.classList.add('is-invalid');
@@ -148,16 +157,12 @@ include '../../includes/header.php';
                     input.classList.remove('is-invalid');
                 }
             });
-
             if (!isValid) {
                 event.preventDefault();
                 const firstError = document.querySelector('.is-invalid');
                 if (firstError) {
                     firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
-            } else {
-                event.preventDefault();
-                alert('¡Cambios guardados correctamente! (Simulación Frontend)');
             }
         });
 

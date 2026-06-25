@@ -1,45 +1,31 @@
-<?php 
-// 1. Requerimos la base de datos simulada
-require_once '../../config/data.php';
+<?php
+require_once dirname(__DIR__, 2) . '/includes/db_funciones.php';
 
-// 2. LÓGICA DE FILTROS
-// Obtenemos los valores de la URL si existen, si no, los dejamos vacíos o por defecto
-$filtro_ubicacion = isset($_GET['ubicacion']) ? $_GET['ubicacion'] : '';
-$filtro_tipo = isset($_GET['tipo']) ? $_GET['tipo'] : 'todos';
-$filtro_precio_min = isset($_GET['precio_min']) && $_GET['precio_min'] !== '' ? (int)$_GET['precio_min'] : 0;
-$filtro_precio_max = isset($_GET['precio_max']) && $_GET['precio_max'] !== '' ? (int)$_GET['precio_max'] : 999999999;
-$filtro_recamaras = isset($_GET['recamaras']) ? $_GET['recamaras'] : 'cualquiera';
+$filtro_ubicacion  = $_GET['ubicacion'] ?? '';
+$filtro_tipo       = $_GET['tipo'] ?? 'todos';
+$filtro_precio_min = $_GET['precio_min'] ?? '';
+$filtro_precio_max = $_GET['precio_max'] ?? '';
+$filtro_recamaras  = $_GET['recamaras'] ?? 'cualquiera';
 
-// Creamos un nuevo arreglo solo con las propiedades que pasen los filtros
-$propiedades_filtradas = [];
+$filtros = [];
+if ($filtro_ubicacion  !== '')               $filtros['ubicacion']   = $filtro_ubicacion;
+if ($filtro_tipo       !== 'todos')          $filtros['tipo']        = $filtro_tipo;
+if ($filtro_precio_min !== '')               $filtros['precio_min']  = (float)$filtro_precio_min;
+if ($filtro_precio_max !== '')               $filtros['precio_max']  = (float)$filtro_precio_max;
+if ($filtro_recamaras  !== 'cualquiera')     $filtros['habitaciones'] = (int)$filtro_recamaras;
 
-foreach($propiedades as $id => $prop) {
-    $pasa_filtros = true;
+$propiedades_filtradas = obtenerPropiedades($filtros);
 
-    // Filtro de ubicación (busca si la palabra clave está dentro de la ubicación)
-    if($filtro_ubicacion !== '' && stripos($prop['ubicacion'], $filtro_ubicacion) === false) {
-        $pasa_filtros = false;
-    }
-    // Filtro de tipo
-    if($filtro_tipo !== 'todos' && strtolower($prop['tipo']) !== strtolower($filtro_tipo)) {
-        $pasa_filtros = false;
-    }
-    // Filtro de precio mínimo y máximo
-    if($prop['precio'] < $filtro_precio_min || $prop['precio'] > $filtro_precio_max) {
-        $pasa_filtros = false;
-    }
-    // Filtro de recámaras (verifica que tenga al menos las recámaras solicitadas)
-    if($filtro_recamaras !== 'cualquiera' && $prop['habitaciones'] < (int)$filtro_recamaras) {
-        $pasa_filtros = false;
-    }
-
-    // Si pasó todas las pruebas, la agregamos a los resultados
-    if($pasa_filtros) {
-        $propiedades_filtradas[$id] = $prop;
-    }
+$usuario = null;
+$favoritosIds = [];
+if (session_status() === PHP_SESSION_NONE) session_start();
+if (isset($_SESSION['usuario'])) {
+    $usuario = $_SESSION['usuario'];
+    $favoritos = obtenerFavoritos($usuario['id']);
+    $favoritosIds = array_column($favoritos, 'id');
 }
 
-include '../../includes/header.php'; 
+include '../../includes/header.php';
 ?>
 
     <main class="catalog-page">
@@ -65,20 +51,21 @@ include '../../includes/header.php';
                             <label for="tipo">Tipo de inmueble</label>
                             <select id="tipo" name="tipo" class="form-control">
                                 <option value="todos" <?php echo $filtro_tipo == 'todos' ? 'selected' : ''; ?>>TODOS</option>
-                                <option value="casa" <?php echo $filtro_tipo == 'casa' ? 'selected' : ''; ?>>Casa</option>
-                                <option value="departamento" <?php echo $filtro_tipo == 'departamento' ? 'selected' : ''; ?>>Departamento</option>
-                                <option value="local comercial" <?php echo $filtro_tipo == 'local comercial' ? 'selected' : ''; ?>>Local Comercial</option>
+                                <option value="Casa" <?php echo $filtro_tipo == 'Casa' ? 'selected' : ''; ?>>Casa</option>
+                                <option value="Departamento" <?php echo $filtro_tipo == 'Departamento' ? 'selected' : ''; ?>>Departamento</option>
+                                <option value="Local Comercial" <?php echo $filtro_tipo == 'Local Comercial' ? 'selected' : ''; ?>>Local Comercial</option>
+                                <option value="Terreno" <?php echo $filtro_tipo == 'Terreno' ? 'selected' : ''; ?>>Terreno</option>
                             </select>
                         </div>
 
                         <div class="form-group">
                             <label for="precio_min">Precio mínimo</label>
-                            <input type="number" id="precio_min" name="precio_min" placeholder="$ 0" class="form-control" value="<?php echo isset($_GET['precio_min']) ? $_GET['precio_min'] : ''; ?>">
+                            <input type="number" id="precio_min" name="precio_min" placeholder="$ 0" class="form-control" value="<?php echo htmlspecialchars($filtro_precio_min); ?>">
                         </div>
 
                         <div class="form-group">
                             <label for="precio_max">Precio máximo</label>
-                            <input type="number" id="precio_max" name="precio_max" placeholder="$ 0" class="form-control" value="<?php echo isset($_GET['precio_max']) ? $_GET['precio_max'] : ''; ?>">
+                            <input type="number" id="precio_max" name="precio_max" placeholder="$ 0" class="form-control" value="<?php echo htmlspecialchars($filtro_precio_max); ?>">
                         </div>
 
                         <div class="form-group">
@@ -106,8 +93,18 @@ include '../../includes/header.php';
                                 <?php if($prop['destacado']): ?>
                                     <span class="badge">DESTACADO</span>
                                 <?php endif; ?>
+                                <?php if ($usuario): ?>
+                                    <?php $esFav = in_array($prop['id'], $favoritosIds); ?>
+                                    <form action="<?php echo BASE_URL; ?>views/public/procesar-favorito.php" method="POST" class="fav-form">
+                                        <input type="hidden" name="id" value="<?php echo $prop['id']; ?>">
+                                        <input type="hidden" name="redirect" value="<?php echo BASE_URL; ?>views/public/catalogo.php<?php echo !empty($_SERVER['QUERY_STRING']) ? '?' . $_SERVER['QUERY_STRING'] : ''; ?>">
+                                        <button type="submit" class="fav-btn" title="<?php echo $esFav ? 'Quitar de favoritos' : 'Agregar a favoritos'; ?>">
+                                            <i class="fa-solid fa-heart <?php echo $esFav ? 'fav-active' : ''; ?>"></i>
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
                                 <a href="<?php echo BASE_URL; ?>views/public/propiedad.php?id=<?php echo $prop['id']; ?>">
-                                    <img src="<?php echo $prop['imagen']; ?>" alt="<?php echo $prop['titulo']; ?>">
+                                    <img src="<?php echo imgUrl($prop['imagen']); ?>" alt="<?php echo $prop['titulo']; ?>">
                                 </a>
                             </div>
                             <div class="property-card__content">
@@ -116,14 +113,14 @@ include '../../includes/header.php';
                                         <?php echo $prop['titulo']; ?>
                                     </a>
                                 </h2>
-                                <p class="price">$<?php echo number_format($prop['precio']); ?></p>
+                                <p class="price">$<?php echo number_format((float)$prop['precio']); ?></p>
                                 <p class="location"><i class="fa-solid fa-location-dot"></i> <?php echo $prop['ubicacion']; ?></p>
                                 
                                 <div class="property-specs">
-                                    <?php if($prop['habitaciones'] > 0): ?>
+                                    <?php if((int)$prop['habitaciones'] > 0): ?>
                                         <span><i class="fa-solid fa-bed"></i> <?php echo $prop['habitaciones']; ?></span>
                                     <?php endif; ?>
-                                    <?php if($prop['banos'] > 0): ?>
+                                    <?php if((int)$prop['banos'] > 0): ?>
                                         <span><i class="fa-solid fa-bath"></i> <?php echo $prop['banos']; ?></span>
                                     <?php endif; ?>
                                     <span><i class="fa-solid fa-vector-square"></i> <?php echo $prop['area']; ?>m²</span>
